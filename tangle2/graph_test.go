@@ -7,19 +7,20 @@ import (
 	"testing"
 
 	tangle "tangle/tangle2"
+	"tangle/tangle2/store"
 
 	test "github.com/advanderveer/go-test"
 )
 
-func checkCommit(t *testing.T, tx *tangle.StoreTx) {
+func checkCommit(t *testing.T, tx tangle.StoreTx) {
 	err := tx.Commit()
 	test.Ok(t, err)
 }
 
 func TestRandomWalk(t *testing.T) {
-	s := tangle.NewStore()
+	s := store.NewSimple()
 	g := tangle.NewGraph(42)
-	tx := s.NewTransaction()
+	tx := s.NewTransaction(true)
 	defer checkCommit(t, tx)
 
 	g.Append(tx, 0, []byte{})
@@ -51,9 +52,9 @@ func TestRandomWalk(t *testing.T) {
 }
 
 func TestStoreChildrenWRS(t *testing.T) {
-	s := tangle.NewStore()
+	s := store.NewSimple()
 	g := tangle.NewGraph(42)
-	tx := s.NewTransaction()
+	tx := s.NewTransaction(true)
 	defer checkCommit(t, tx)
 
 	//start with equal distribution
@@ -104,13 +105,13 @@ func TestStoreChildrenWRS(t *testing.T) {
 }
 
 func TestStoreLinearBlocks(t *testing.T) {
-	s := tangle.NewStore()
+	s := store.NewSimple()
 	g := tangle.NewGraph(42)
 
 	n := uint64(100) //insert this many blocks
 
 	t.Run("should add 100 blocks in lineaur shape", func(t *testing.T) {
-		tx := s.NewTransaction()
+		tx := s.NewTransaction(true)
 		defer checkCommit(t, tx)
 
 		for i := uint64(0); i < n; i++ {
@@ -141,11 +142,11 @@ func TestStoreLinearBlocks(t *testing.T) {
 func TestStoreFanOutConcurrentBlockPut(t *testing.T) {
 	n := uint64(100) //insert this many blocks
 
-	s := tangle.NewStore()
+	s := store.NewSimple()
 	g := tangle.NewGraph(42)
 
 	t.Run("add genesis", func(t *testing.T) {
-		tx := s.NewTransaction()
+		tx := s.NewTransaction(true)
 		defer checkCommit(t, tx)
 
 		g.Append(tx, math.MaxUint64, []byte{0x01})
@@ -169,7 +170,7 @@ func TestStoreFanOutConcurrentBlockPut(t *testing.T) {
 				func(i uint64) { //append blocks
 					var err error
 
-					tx := s.NewTransaction()
+					tx := s.NewTransaction(true)
 					g.Append(tx, i, b, math.MaxUint64)
 
 					err = tx.Commit()
@@ -177,7 +178,7 @@ func TestStoreFanOutConcurrentBlockPut(t *testing.T) {
 				}(i)
 
 				func(i uint64) { //read blocks
-					tx := s.NewTransaction()
+					tx := s.NewTransaction(true)
 					defer checkCommit(t, tx)
 
 					b2 := g.Get(tx, i)
@@ -188,7 +189,7 @@ func TestStoreFanOutConcurrentBlockPut(t *testing.T) {
 	})
 
 	t.Run("should correctly report parents and children", func(t *testing.T) {
-		tx := s.NewTransaction()
+		tx := s.NewTransaction(true)
 		defer checkCommit(t, tx)
 
 		test.Equals(t, int(n), len(g.Tips(tx))) //test tip
@@ -199,7 +200,7 @@ func TestStoreFanOutConcurrentBlockPut(t *testing.T) {
 	})
 
 	t.Run("should correctly walk graph", func(t *testing.T) {
-		tx := s.NewTransaction()
+		tx := s.NewTransaction(true)
 		defer checkCommit(t, tx)
 
 		t.Run("front to back", func(t *testing.T) {

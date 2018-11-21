@@ -10,16 +10,16 @@ import (
 //Tangle is our consensus data structure
 type Tangle struct {
 	graph   *Graph
-	store   *Store
+	store   Store
 	genesis []uint64
 	idc     uint64
 }
 
 //NewTangle initiates a tangle
-func NewTangle() (t *Tangle) {
-	t = &Tangle{graph: NewGraph(42), store: NewStore()}
+func NewTangle(store Store) (t *Tangle) {
+	t = &Tangle{graph: NewGraph(42), store: store}
 
-	tx := t.store.NewTransaction()
+	tx := t.store.NewTransaction(true)
 	defer t.mustCommit(tx)
 	t.genesis = []uint64{ //add 2 genesis blocks
 		t.receiveBlock(tx, []byte{0x01}),
@@ -36,7 +36,7 @@ func (t *Tangle) Genesis() []uint64 {
 
 //Draw the tangle, mainly for debugging purposes
 func (t *Tangle) Draw(w io.Writer) (err error) {
-	tx := t.store.NewTransaction()
+	tx := t.store.NewTransaction(false)
 	defer t.mustCommit(tx)
 
 	fmt.Fprintln(w, `digraph {`)
@@ -59,12 +59,12 @@ func (t *Tangle) Draw(w io.Writer) (err error) {
 //SelectTips will peform the tip selection until we have 'n' unique or ran the
 //algorithm 'max' times whatever happens first
 func (t *Tangle) SelectTips(n, max int) (tips []uint64) {
-	tx := t.store.NewTransaction()
+	tx := t.store.NewTransaction(false)
 	defer t.mustCommit(tx)
 	return t.selectTips(tx, n, max)
 }
 
-func (t *Tangle) selectTips(tx *StoreTx, n, max int) (tips []uint64) {
+func (t *Tangle) selectTips(tx StoreTx, n, max int) (tips []uint64) {
 	utips := map[uint64]struct{}{}
 	for i := 0; i < max; i++ {
 		if len(utips) >= n {
@@ -95,12 +95,12 @@ func (t *Tangle) selectTips(tx *StoreTx, n, max int) (tips []uint64) {
 
 //ReceiveBlock with take data and
 func (t *Tangle) ReceiveBlock(d []byte, parents ...uint64) (id uint64) {
-	tx := t.store.NewTransaction()
+	tx := t.store.NewTransaction(true)
 	defer t.mustCommit(tx)
 	return t.receiveBlock(tx, d, parents...)
 }
 
-func (t *Tangle) receiveBlock(tx *StoreTx, d []byte, parents ...uint64) (id uint64) {
+func (t *Tangle) receiveBlock(tx StoreTx, d []byte, parents ...uint64) (id uint64) {
 	//@TODO add deduplication and verification
 	//@TODO this seems racy, id should probably be retrieved from storage layer
 	atomic.AddUint64(&t.idc, 1)
@@ -109,7 +109,7 @@ func (t *Tangle) receiveBlock(tx *StoreTx, d []byte, parents ...uint64) (id uint
 	return
 }
 
-func (t *Tangle) mustCommit(tx *StoreTx) {
+func (t *Tangle) mustCommit(tx StoreTx) {
 	err := tx.Commit()
 	if err != nil { //@TODO handle this propertly
 		panic("failed to commit: " + err.Error())

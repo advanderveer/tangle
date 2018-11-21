@@ -13,11 +13,14 @@ import (
 
 	tangle "tangle/tangle2"
 
+	"tangle/tangle2/store"
+
 	test "github.com/advanderveer/go-test"
 )
 
 func TestTipSelection(t *testing.T) {
-	tngl := tangle.NewTangle()
+	s := store.NewSimple()
+	tngl := tangle.NewTangle(s)
 	g := tngl.Genesis()
 	test.Equals(t, 2, len(g))
 	test.Equals(t, uint64(1), g[0])
@@ -58,12 +61,16 @@ func timeline(seed int64, n int, λ float64, every time.Duration) (c chan time.T
 }
 
 func TestGraphDrawing(t *testing.T) {
+	s := store.NewSimple()
 	buf := bytes.NewBuffer(nil)
-	tngl := tangle.NewTangle()
+	tngl := tangle.NewTangle(s)
 	rnd := rand.New(rand.NewSource(42))
 
+	//@TODO how can we test the tangling factor?
+	//@TODO make sure it also tangles without poisson timeline
+
 	n := 120
-	λ := 2.1
+	λ := 1.8
 	u := time.Millisecond * 10
 
 	var wg sync.WaitGroup
