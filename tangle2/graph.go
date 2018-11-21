@@ -66,7 +66,7 @@ func (g *Graph) Append(tx *StoreTx, id uint64, data []byte, parents ...uint64) {
 	}
 
 	//update weights for each block (in)directly referenced
-	if err := g.Walk(tx, parents, g.Parents, false, func(id uint64, data []byte, m Meta) error {
+	if err := g.Walk(tx, parents, g.Parents, false, func(id uint64, data []byte, m Meta, la []uint64) error {
 		m.Weight++
 		tx.setMeta(id, m)
 		return nil
@@ -78,8 +78,8 @@ func (g *Graph) Append(tx *StoreTx, id uint64, data []byte, parents ...uint64) {
 	tx.setMeta(id, Meta{Height: height})
 }
 
-type nextFunc func(tx *StoreTx, id uint64) []uint64      //determine the next nodes
-type walkFunc func(id uint64, data []byte, m Meta) error //execute for each node
+type nextFunc func(tx *StoreTx, id uint64) []uint64                   //determine the next nodes
+type walkFunc func(id uint64, data []byte, m Meta, la []uint64) error //execute for each node
 
 //Walk the graph
 func (g *Graph) Walk(tx *StoreTx, f []uint64, nf nextFunc, depthFirst bool, wf walkFunc) (err error) {
@@ -97,8 +97,10 @@ func (g *Graph) Walk(tx *StoreTx, f []uint64, nf nextFunc, depthFirst bool, wf w
 			panic("block doesn't exist")
 		}
 
-		m, _ := tx.getMeta(bid)
-		err = wf(bid, b, m)
+		m, _ := tx.getMeta(bid)  //current blocks's meta
+		lookahead := nf(tx, bid) //curernt block's lookahead
+
+		err = wf(bid, b, m, lookahead)
 		if err == ErrSkipNext {
 			err = nil
 			continue
@@ -107,7 +109,7 @@ func (g *Graph) Walk(tx *StoreTx, f []uint64, nf nextFunc, depthFirst bool, wf w
 		}
 
 		visited[bid] = struct{}{}
-		for _, n := range nf(tx, bid) {
+		for _, n := range lookahead {
 			if depthFirst {
 				frontier.Prepend(n)
 			} else {
@@ -162,14 +164,8 @@ func (g *Graph) ChildrenWRS(tx *StoreTx, id uint64) (children []uint64) {
 
 //Get will return a block by its id or return nil if not found
 func (g *Graph) Get(tx *StoreTx, id uint64) (data []byte) {
-	if err := g.Walk(tx, []uint64{id}, nil, false, func(bid uint64, d []byte, m Meta) (err error) {
-		data = d
-		return ErrSkipNext
-	}); err != nil {
-		panic("error while walking for single node: " + err.Error())
-	}
-
-	return
+	data, _ = tx.getData(id)
+	return data
 }
 
 //Meta information about a block

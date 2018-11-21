@@ -37,7 +37,7 @@ func TestRandomWalk(t *testing.T) {
 		distFirstSplit := map[uint64]int{}
 		for i := 0; i < 10; i++ {
 			rw := []uint64{}
-			test.Ok(t, g.Walk(tx, []uint64{0}, g.RevChildrenWRS, true, func(bid uint64, d []byte, m tangle.Meta) (err error) {
+			test.Ok(t, g.Walk(tx, []uint64{0}, g.RevChildrenWRS, true, func(bid uint64, d []byte, m tangle.Meta, la []uint64) (err error) {
 				rw = append(rw, bid)
 				return
 			}))
@@ -123,7 +123,7 @@ func TestStoreLinearBlocks(t *testing.T) {
 
 		var visited []uint64
 		var height uint64
-		test.Ok(t, g.Walk(tx, []uint64{0}, g.Children, false, func(bid uint64, d []byte, m tangle.Meta) (err error) {
+		test.Ok(t, g.Walk(tx, []uint64{0}, g.Children, false, func(bid uint64, d []byte, m tangle.Meta, la []uint64) (err error) {
 			if bid == 0 {
 				test.Equals(t, uint64(99), m.Weight)
 			}
@@ -204,7 +204,7 @@ func TestStoreFanOutConcurrentBlockPut(t *testing.T) {
 
 		t.Run("front to back", func(t *testing.T) {
 			var f2b []uint64 //walk front 2 back
-			test.Ok(t, g.Walk(tx, g.Tips(tx), g.Parents, false, func(bid uint64, d []byte, m tangle.Meta) (err error) {
+			test.Ok(t, g.Walk(tx, g.Tips(tx), g.Parents, false, func(bid uint64, d []byte, m tangle.Meta, la []uint64) (err error) {
 				f2b = append(f2b, bid)
 				return
 			}))
@@ -215,7 +215,7 @@ func TestStoreFanOutConcurrentBlockPut(t *testing.T) {
 
 		t.Run("front to back depth-first", func(t *testing.T) {
 			var f2b []uint64 //walk front 2 back
-			test.Ok(t, g.Walk(tx, g.Tips(tx), g.Parents, true, func(bid uint64, d []byte, m tangle.Meta) (err error) {
+			test.Ok(t, g.Walk(tx, g.Tips(tx), g.Parents, true, func(bid uint64, d []byte, m tangle.Meta, la []uint64) (err error) {
 				f2b = append(f2b, bid)
 				return
 			}))
@@ -227,7 +227,7 @@ func TestStoreFanOutConcurrentBlockPut(t *testing.T) {
 		t.Run("back to front", func(t *testing.T) {
 			var b2f []uint64 //walk back to front
 			height := uint64(math.MaxUint64)
-			test.Ok(t, g.Walk(tx, []uint64{math.MaxUint64}, g.Children, false, func(bid uint64, d []byte, m tangle.Meta) (err error) {
+			test.Ok(t, g.Walk(tx, []uint64{math.MaxUint64}, g.Children, false, func(bid uint64, d []byte, m tangle.Meta, la []uint64) (err error) {
 				b2f = append(b2f, bid)
 				height = m.Height
 				return
@@ -242,7 +242,7 @@ func TestStoreFanOutConcurrentBlockPut(t *testing.T) {
 			testErr := errors.New("test error")
 			var errv []uint64 //walk back to front
 			height := uint64(math.MaxUint64)
-			test.Equals(t, testErr, g.Walk(tx, []uint64{math.MaxUint64}, g.Children, false, func(bid uint64, d []byte, m tangle.Meta) (err error) {
+			test.Equals(t, testErr, g.Walk(tx, []uint64{math.MaxUint64}, g.Children, false, func(bid uint64, d []byte, m tangle.Meta, la []uint64) (err error) {
 				errv = append(errv, bid)
 				height = m.Height
 				return testErr

@@ -21,6 +21,7 @@ func NewStore() (s *Store) {
 		p2c:  make(map[uint64][]uint64),
 		c2p:  make(map[uint64][]uint64),
 	}
+
 	return
 }
 
@@ -82,6 +83,7 @@ func (tx *StoreTx) setC2p(id uint64, c2p []uint64) {
 	tx.s.c2p[id] = c2p
 }
 
+//Commit the store transaction
 func (tx *StoreTx) Commit() (err error) {
 	tx.s.mu.Unlock()
 	return
