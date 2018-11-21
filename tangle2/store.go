@@ -26,8 +26,8 @@ func NewStore() (s *Store) {
 
 //NewTransaction starts a store transaction
 func (s *Store) NewTransaction() (tx *StoreTx) {
-	s.mu.Lock()         //unlocked by commiting the transaction
-	tx = &StoreTx{s: s} //@TODO seed with random bytes
+	s.mu.Lock() //unlocked by commiting the transaction
+	tx = &StoreTx{s: s}
 	return
 }
 
@@ -82,7 +82,6 @@ func (tx *StoreTx) setC2p(id uint64, c2p []uint64) {
 	tx.s.c2p[id] = c2p
 }
 
-//Commit the graph data
 func (tx *StoreTx) Commit() (err error) {
 	tx.s.mu.Unlock()
 	return
