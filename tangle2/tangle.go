@@ -1,6 +1,8 @@
 package tangle
 
 import (
+	"fmt"
+	"io"
 	"sort"
 	"sync/atomic"
 )
@@ -32,6 +34,28 @@ func (t *Tangle) Genesis() []uint64 {
 	return t.genesis
 }
 
+//Draw the tangle, mainly for debugging purposes
+func (t *Tangle) Draw(w io.Writer) (err error) {
+	tx := t.store.NewTransaction()
+	defer t.mustCommit(tx)
+
+	fmt.Fprintln(w, `digraph {`)
+	if err := t.graph.Walk(tx, t.genesis, t.graph.RevChildrenWRS, true, func(id uint64, data []byte, m Meta, la []uint64) error {
+		fmt.Fprintf(w, "\t"+`"%d" [shape=box];`+"\n", id)
+
+		for _, l := range la {
+			fmt.Fprintf(w, "\t"+`"%d" -> "%d";`+"\n", id, l)
+		}
+
+		return nil
+	}); err != nil {
+		return fmt.Errorf("failed to walk: %v", err)
+	}
+
+	fmt.Fprintln(w, `}`)
+	return
+}
+
 //SelectTips will peform the tip selection until we have 'n' unique or ran the
 //algorithm 'max' times whatever happens first
 func (t *Tangle) SelectTips(n, max int) (tips []uint64) {
@@ -50,7 +74,7 @@ func (t *Tangle) selectTips(tx *StoreTx, n, max int) (tips []uint64) {
 		//perform a dept-first children traveral with weighted selection
 		if err := t.graph.Walk(tx, t.genesis, t.graph.RevChildrenWRS, true, func(id uint64, data []byte, m Meta, la []uint64) error {
 			//@TODO perform validation
-
+			//@TODO also add tips that are not completely on the front line
 			if len(la) == 0 {
 				utips[id] = struct{}{} //add as tip
 			}
