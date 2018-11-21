@@ -4,7 +4,6 @@ import (
 	"errors"
 	"math/rand"
 	"sort"
-	"sync"
 )
 
 var (
@@ -12,15 +11,15 @@ var (
 	ErrSkipNext = errors.New("skip next")
 )
 
-//Tx provides an atomic iteraction on our block store
-type Tx struct {
-	s   *Graph
+//GraphTx provides an atomic iteraction on our graph
+type GraphTx struct {
 	rnd *rand.Rand
+	stx *StoreTx
 }
 
 //Weight returns the weight of the provided block, if the provided block does'nt exist it panics
-func (tx *Tx) Weight(id uint64) (w uint64) {
-	m, ok := tx.s.meta[id]
+func (tx *GraphTx) Weight(id uint64) (w uint64) {
+	m, ok := tx.stx.getMeta(id)
 	if !ok {
 		panic("block doesn't exist")
 	}
@@ -29,8 +28,8 @@ func (tx *Tx) Weight(id uint64) (w uint64) {
 }
 
 //Tips returns all blocks without parents
-func (tx *Tx) Tips() (tips []uint64) {
-	for t := range tx.s.tips {
+func (tx *GraphTx) Tips() (tips []uint64) {
+	for t := range tx.stx.getTips() {
 		tips = append(tips, t)
 	}
 
@@ -38,20 +37,20 @@ func (tx *Tx) Tips() (tips []uint64) {
 }
 
 //Append a new block to the DAG
-func (tx *Tx) Append(id uint64, data []byte, parents ...uint64) {
-	_, ok := tx.s.data[id]
+func (tx *GraphTx) Append(id uint64, data []byte, parents ...uint64) {
+	_, ok := tx.stx.getData(id)
 	if ok {
 		panic("block already exists")
 	}
 
 	//set data and make new tips
-	tx.s.data[id] = data
-	tx.s.tips[id] = struct{}{}
+	tx.stx.setData(id, data)
+	tx.stx.setTip(id)
 
 	//update edges and tipsier
 	var height uint64
 	for _, pid := range parents {
-		pmeta, ok := tx.s.meta[pid]
+		pmeta, ok := tx.stx.getMeta(pid)
 		if !ok {
 			panic("parent (meta) doesn't exist")
 		}
@@ -63,33 +62,33 @@ func (tx *Tx) Append(id uint64, data []byte, parents ...uint64) {
 		}
 
 		//if parent was part of tips, it is no longer
-		if _, ok := tx.s.tips[pid]; ok {
-			delete(tx.s.tips, pid)
+		if _, ok := tx.stx.getTips()[pid]; ok {
+			tx.stx.delTip(pid)
 		}
 
 		//update edges
-		tx.s.p2c[pid] = append(tx.s.p2c[pid], id)
-		tx.s.c2p[id] = append(tx.s.c2p[id], pid)
+		tx.stx.setP2c(pid, append(tx.stx.getP2c(pid), id))
+		tx.stx.setC2p(id, append(tx.stx.getC2p(id), pid))
 	}
 
 	//update weights for each block (in)directly referenced
 	if err := tx.Walk(parents, tx.Parents, false, func(id uint64, data []byte, m Meta) error {
 		m.Weight++
-		tx.s.meta[id] = m
+		tx.stx.setMeta(id, m)
 		return nil
 	}); err != nil {
 		panic("failed to update weights: " + err.Error())
 	}
 
 	//set this blocks meta
-	tx.s.meta[id] = Meta{Height: height}
+	tx.stx.setMeta(id, Meta{Height: height})
 }
 
 type nextFunc func(id uint64) []uint64                   //determine the next nodes
 type walkFunc func(id uint64, data []byte, m Meta) error //execute for each node
 
 //Walk the graph
-func (tx *Tx) Walk(f []uint64, nf nextFunc, depthFirst bool, wf walkFunc) (err error) {
+func (tx *GraphTx) Walk(f []uint64, nf nextFunc, depthFirst bool, wf walkFunc) (err error) {
 	visited := make(map[uint64]struct{})
 	frontier := NewIter(f...)
 
@@ -99,12 +98,13 @@ func (tx *Tx) Walk(f []uint64, nf nextFunc, depthFirst bool, wf walkFunc) (err e
 			continue
 		}
 
-		b := tx.s.data[bid]
+		b, _ := tx.stx.getData(bid)
 		if b == nil {
 			panic("block doesn't exist")
 		}
 
-		err = wf(bid, b, tx.s.meta[bid])
+		m, _ := tx.stx.getMeta(bid)
+		err = wf(bid, b, m)
 		if err == ErrSkipNext {
 			err = nil
 			continue
@@ -126,19 +126,19 @@ func (tx *Tx) Walk(f []uint64, nf nextFunc, depthFirst bool, wf walkFunc) (err e
 }
 
 //Parents returns the parents of a given block
-func (tx *Tx) Parents(id uint64) (parents []uint64) {
-	parents = tx.s.c2p[id]
+func (tx *GraphTx) Parents(id uint64) (parents []uint64) {
+	parents = tx.stx.getC2p(id)
 	return
 }
 
 //Children returns the children of a given block
-func (tx *Tx) Children(id uint64) (children []uint64) {
-	children = tx.s.p2c[id]
+func (tx *GraphTx) Children(id uint64) (children []uint64) {
+	children = tx.stx.getP2c(id)
 	return
 }
 
 //RevChildrenWRS returns the reversed randomly weighted shuffled children ids
-func (tx *Tx) RevChildrenWRS(id uint64) (children []uint64) {
+func (tx *GraphTx) RevChildrenWRS(id uint64) (children []uint64) {
 	a := tx.ChildrenWRS(id)
 	for i := len(a)/2 - 1; i >= 0; i-- {
 		opp := len(a) - 1 - i
@@ -149,7 +149,7 @@ func (tx *Tx) RevChildrenWRS(id uint64) (children []uint64) {
 }
 
 //ChildrenWRS returns childres randomly shuffled by their weighted (Weigthed Random Shuffle)
-func (tx *Tx) ChildrenWRS(id uint64) (children []uint64) {
+func (tx *GraphTx) ChildrenWRS(id uint64) (children []uint64) {
 	var (
 		ids     []uint64
 		weights []uint64
@@ -167,7 +167,7 @@ func (tx *Tx) ChildrenWRS(id uint64) (children []uint64) {
 }
 
 //Get will return a block by its id or return nil if not found
-func (tx *Tx) Get(id uint64) (data []byte) {
+func (tx *GraphTx) Get(id uint64) (data []byte) {
 	if err := tx.Walk([]uint64{id}, nil, false, func(bid uint64, d []byte, m Meta) (err error) {
 		data = d
 		return ErrSkipNext
@@ -175,12 +175,6 @@ func (tx *Tx) Get(id uint64) (data []byte) {
 		panic("error while walking for single node: " + err.Error())
 	}
 
-	return
-}
-
-//Commit the transaction
-func (tx *Tx) Commit() (err error) {
-	tx.s.mu.Unlock()
 	return
 }
 
@@ -192,32 +186,31 @@ type Meta struct {
 
 //Graph stores blocks
 type Graph struct {
-	meta map[uint64]Meta     //keep (local) metadata about blocks
-	tips map[uint64]struct{} //keep orphan blocks as tips
-	data map[uint64][]byte   //holds block data
-	p2c  map[uint64][]uint64 //map parent -> child
-	c2p  map[uint64][]uint64 //map children -> parents
-	mu   sync.Mutex
-	seed int64
+	seed  int64
+	store *Store
 }
 
 //NewGraph initates a store
 func NewGraph(seed int64) (s *Graph, err error) {
 	s = &Graph{
-		meta: make(map[uint64]Meta),
-		tips: make(map[uint64]struct{}),
-		data: make(map[uint64][]byte),
-		p2c:  make(map[uint64][]uint64),
-		c2p:  make(map[uint64][]uint64),
-		seed: seed,
+		seed:  seed,
+		store: NewStore(),
 	}
 
 	return
 }
 
 //NewTransaction creates ACID store transaction
-func (s *Graph) NewTransaction() (tx *Tx) {
-	s.mu.Lock()                                           //unlocked by commiting the transaction
-	tx = &Tx{s: s, rnd: rand.New(rand.NewSource(s.seed))} //@TODO seed with random bytes
+func (s *Graph) NewTransaction() (tx *GraphTx) {
+	tx = &GraphTx{
+		rnd: rand.New(rand.NewSource(s.seed)),
+		stx: s.store.NewTransaction(),
+	}
+
 	return
+}
+
+//Commit the transaction
+func (tx *GraphTx) Commit() (err error) {
+	return tx.stx.Commit()
 }

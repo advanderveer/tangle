@@ -11,7 +11,7 @@ import (
 	test "github.com/advanderveer/go-test"
 )
 
-func checkCommit(t *testing.T, tx *tangle.Tx) {
+func checkCommit(t *testing.T, tx *tangle.GraphTx) {
 	err := tx.Commit()
 	test.Ok(t, err)
 }
