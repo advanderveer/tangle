@@ -180,17 +180,15 @@ type Meta struct {
 
 //Graph stores blocks
 type Graph struct {
-	seed  int64
-	store *Store
-	rnd   *rand.Rand
+	seed int64
+	rnd  *rand.Rand
 }
 
 //NewGraph initates a store
 func NewGraph(seed int64) (g *Graph) {
 	g = &Graph{
-		seed:  seed,
-		rnd:   rand.New(rand.NewSource(seed)),
-		store: NewStore(),
+		seed: seed,
+		rnd:  rand.New(rand.NewSource(seed)),
 	}
 
 	return
